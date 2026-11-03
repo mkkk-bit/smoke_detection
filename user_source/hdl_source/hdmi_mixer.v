@@ -46,30 +46,6 @@ module hdmi_mixer #(
 
     reg        S_osd_hit;
     reg [23:0] S_osd_color;
-    reg [11:0] S_logo_x;
-    reg [11:0] S_logo_y;
-    reg [3:0]  S_char_idx;
-    reg [2:0]  S_char_row;
-    reg [2:0]  S_char_col;
-    reg [4:0]  S_char_bits;
-    reg        S_char_on;
-    reg        S_logo_blue_on;
-    reg        S_logo_red_on;
-    reg [11:0] S_logo_tmp_y;
-    reg [3:0]  S_logo_red_band;
-    reg [11:0] S_logo_red_x_start;
-    reg [11:0] S_logo_red_x_end;
-    reg [14:0] S_logo_addr;
-    wire[24:0] S_logo_pixel;
-    // 75% transparent: logo contributes 4/16, video contributes 12/16.
-    localparam [3:0] LOGO_ALPHA = 4'd4;
-    wire [12:0] S_logo_blend_r = ({5'd0, S_video_data_2d[23:16]} * (5'd16 - LOGO_ALPHA)) +
-                                  ({5'd0, S_logo_pixel[23:16]} * LOGO_ALPHA) + 13'd8;
-    wire [12:0] S_logo_blend_g = ({5'd0, S_video_data_2d[15:8]} * (5'd16 - LOGO_ALPHA)) +
-                                  ({5'd0, S_logo_pixel[15:8]} * LOGO_ALPHA) + 13'd8;
-    wire [12:0] S_logo_blend_b = ({5'd0, S_video_data_2d[7:0]} * (5'd16 - LOGO_ALPHA)) +
-                                  ({5'd0, S_logo_pixel[7:0]} * LOGO_ALPHA) + 13'd8;
-    wire [23:0] S_logo_blend_rgb = {S_logo_blend_r[11:4], S_logo_blend_g[11:4], S_logo_blend_b[11:4]};
     reg [31:0] S_frame_cnt;
     reg [19:0] S_bcd_bin_shift;
     reg [23:0] S_bcd_shift;
@@ -137,13 +113,6 @@ module hdmi_mixer #(
     reg [9:0]  S_pf_scale_x;
     reg [9:0]  S_pf_scale_y;
 
-    localparam LOGO_X = 12'd0;
-    localparam LOGO_Y = 12'd0;
-    localparam LOGO_W = 12'd160;
-    localparam LOGO_H = 12'd160;
-
-    localparam COLOR_LOGO_BLUE   = 24'h1f315c;
-    localparam COLOR_LOGO_RED    = 24'hec1c2d;
     localparam COLOR_TEXT        = 24'h00e6ff;
     localparam DYN_OSD_X         = 12'd375;
     localparam DYN_OSD_Y         = 12'd120;
@@ -182,99 +151,6 @@ module hdmi_mixer #(
     wire [23:0] S_area_bcd_next = {S_area_bcd_adjusted[22:0],S_area_bin_shift[19]};
     wire [23:0] S_max_bcd_adjusted = F_bcd_add3(S_max_bcd_shift);
     wire [23:0] S_max_bcd_next = {S_max_bcd_adjusted[22:0],S_max_bin_shift[19]};
-    function [4:0] F_logo_text_bits;
-        input [3:0] I_char;
-        input [2:0] I_row;
-        begin
-            case(I_char)
-                4'd0: begin
-                    case(I_row) // A
-                        3'd0: F_logo_text_bits = 5'b01110;
-                        3'd1: F_logo_text_bits = 5'b10001;
-                        3'd2: F_logo_text_bits = 5'b10001;
-                        3'd3: F_logo_text_bits = 5'b11111;
-                        3'd4: F_logo_text_bits = 5'b10001;
-                        3'd5: F_logo_text_bits = 5'b10001;
-                        3'd6: F_logo_text_bits = 5'b10001;
-                        default: F_logo_text_bits = 5'b00000;
-                    endcase
-                end
-                4'd1: begin
-                    case(I_row) // N
-                        3'd0: F_logo_text_bits = 5'b10001;
-                        3'd1: F_logo_text_bits = 5'b11001;
-                        3'd2: F_logo_text_bits = 5'b10101;
-                        3'd3: F_logo_text_bits = 5'b10011;
-                        3'd4: F_logo_text_bits = 5'b10001;
-                        3'd5: F_logo_text_bits = 5'b10001;
-                        3'd6: F_logo_text_bits = 5'b10001;
-                        default: F_logo_text_bits = 5'b00000;
-                    endcase
-                end
-                4'd2: begin
-                    case(I_row) // L
-                        3'd0: F_logo_text_bits = 5'b10000;
-                        3'd1: F_logo_text_bits = 5'b10000;
-                        3'd2: F_logo_text_bits = 5'b10000;
-                        3'd3: F_logo_text_bits = 5'b10000;
-                        3'd4: F_logo_text_bits = 5'b10000;
-                        3'd5: F_logo_text_bits = 5'b10000;
-                        3'd6: F_logo_text_bits = 5'b11111;
-                        default: F_logo_text_bits = 5'b00000;
-                    endcase
-                end
-                4'd3: begin
-                    case(I_row) // O
-                        3'd0: F_logo_text_bits = 5'b01110;
-                        3'd1: F_logo_text_bits = 5'b10001;
-                        3'd2: F_logo_text_bits = 5'b10001;
-                        3'd3: F_logo_text_bits = 5'b10001;
-                        3'd4: F_logo_text_bits = 5'b10001;
-                        3'd5: F_logo_text_bits = 5'b10001;
-                        3'd6: F_logo_text_bits = 5'b01110;
-                        default: F_logo_text_bits = 5'b00000;
-                    endcase
-                end
-                4'd4: begin
-                    case(I_row) // G
-                        3'd0: F_logo_text_bits = 5'b01110;
-                        3'd1: F_logo_text_bits = 5'b10001;
-                        3'd2: F_logo_text_bits = 5'b10000;
-                        3'd3: F_logo_text_bits = 5'b10111;
-                        3'd4: F_logo_text_bits = 5'b10001;
-                        3'd5: F_logo_text_bits = 5'b10001;
-                        3'd6: F_logo_text_bits = 5'b01110;
-                        default: F_logo_text_bits = 5'b00000;
-                    endcase
-                end
-                4'd5: begin
-                    case(I_row) // I
-                        3'd0: F_logo_text_bits = 5'b11111;
-                        3'd1: F_logo_text_bits = 5'b00100;
-                        3'd2: F_logo_text_bits = 5'b00100;
-                        3'd3: F_logo_text_bits = 5'b00100;
-                        3'd4: F_logo_text_bits = 5'b00100;
-                        3'd5: F_logo_text_bits = 5'b00100;
-                        3'd6: F_logo_text_bits = 5'b11111;
-                        default: F_logo_text_bits = 5'b00000;
-                    endcase
-                end
-                4'd6: begin
-                    case(I_row) // C
-                        3'd0: F_logo_text_bits = 5'b01110;
-                        3'd1: F_logo_text_bits = 5'b10001;
-                        3'd2: F_logo_text_bits = 5'b10000;
-                        3'd3: F_logo_text_bits = 5'b10000;
-                        3'd4: F_logo_text_bits = 5'b10000;
-                        3'd5: F_logo_text_bits = 5'b10001;
-                        3'd6: F_logo_text_bits = 5'b01110;
-                        default: F_logo_text_bits = 5'b00000;
-                    endcase
-                end
-                default: F_logo_text_bits = 5'b00000;
-            endcase
-        end
-    endfunction
 
     // 7-seg bit mapping: {a,b,c,d,e,f,g}
     function [6:0] F_hex7seg;
@@ -354,7 +230,6 @@ module hdmi_mixer #(
         end
     endfunction
 
-    // Minimal 16x16 Chinese bitmap rows for "an" and "lu".
     function [15:0] F_cn16_row;
         input I_char; // 0: an, 1: lu
         input [3:0] I_row;
@@ -430,7 +305,6 @@ module hdmi_mixer #(
         end
     endfunction
 
-    // Unified prefix character library (16x16 rows): an/lu/C/N/T/:
     function [15:0] F_osd_char16_row;
         input [7:0] I_char;
         input [3:0] I_row;
@@ -530,7 +404,6 @@ module hdmi_mixer #(
         end
     endfunction
 
-    // Compact white-on-navy labels, matching the four pane headers.
     function [4:0] F_metric_row5;
         input [7:0] ch;
         input [2:0] row;
@@ -548,11 +421,6 @@ module hdmi_mixer #(
         end
     endfunction
     assign O_video_rd_en = I_video_de;
-
-    anlogic_logo_rom u_anlogic_logo_rom(
-        .I_addr  ( S_logo_addr  ),
-        .O_pixel ( S_logo_pixel )
-    );
 
     osd_char_lib u_osd_char_lib(
         .I_char     ( S_pf_char     ),
@@ -595,7 +463,6 @@ module hdmi_mixer #(
             S_bcd_busy <= 1'b0;
         end else if(I_video_user) begin
             S_frame_cnt <= S_frame_cnt + 32'd1;
-            // Convert the last completed frame's binary candidate count to six BCD digits.
             S_bcd_bin_shift <= I_candidate_count;
             S_bcd_shift <= 24'd0;
             S_bcd_step <= 5'd0;
@@ -617,8 +484,6 @@ module hdmi_mixer #(
         end
     end
 
-    // Convert the selected area threshold only when it changes. This keeps
-    // decimal formatting off the per-pixel combinational path.
     always @(posedge I_clk or negedge I_rst_n) begin
         if(!I_rst_n) begin
             S_area_bin_shift <= 20'd0;
@@ -651,8 +516,6 @@ module hdmi_mixer #(
         end
     end
 
-    // Keep a second decimal readout for the largest component reported by CCL.
-    // This lets the operator compare the live object size with the MIN gate.
     always @(posedge I_clk or negedge I_rst_n) begin
         if(!I_rst_n) begin
             S_max_bin_shift <= 20'd0;
@@ -703,21 +566,6 @@ module hdmi_mixer #(
     always @(*) begin
         S_osd_hit   = 1'b0;
         S_osd_color = 24'd0;
-        S_logo_addr = 15'd0;
-
-        S_logo_x = 12'd0;
-        S_logo_y = 12'd0;
-        S_char_idx = 4'd0;
-        S_char_row = 3'd0;
-        S_char_col = 3'd0;
-        S_char_bits = 5'd0;
-        S_char_on = 1'b0;
-        S_logo_blue_on = 1'b0;
-        S_logo_red_on = 1'b0;
-        S_logo_tmp_y = 12'd0;
-        S_logo_red_band = 4'd0;
-        S_logo_red_x_start = 12'd0;
-        S_logo_red_x_end = 12'd0;
         S_dyn_x = 12'd0;
         S_dyn_y = 12'd0;
         S_dyn_char = 4'd0;
@@ -754,17 +602,6 @@ module hdmi_mixer #(
         S_pf_scale_y = 10'd0;
 
         if(S_video_de_2d) begin
-            if((S_x_2d >= LOGO_X) && (S_x_2d < (LOGO_X + LOGO_W)) &&
-               (S_y_2d >= LOGO_Y) && (S_y_2d < (LOGO_Y + LOGO_H))) begin
-                S_logo_x = S_x_2d - LOGO_X;
-                S_logo_y = S_y_2d - LOGO_Y;
-                S_logo_addr = S_logo_y * LOGO_W + S_logo_x;
-                if(S_logo_pixel[24]) begin
-                    S_osd_hit   = 1'b1;
-                    S_osd_color = S_logo_blend_rgb;
-                end
-            end
-
             if((!S_osd_hit) &&
                (S_x_2d >= DYN_OSD_X) && (S_x_2d < (DYN_OSD_X + DYN_OSD_W)) &&
                (S_y_2d >= DYN_OSD_Y) && (S_y_2d < (DYN_OSD_Y + DYN_OSD_H))) begin
@@ -772,7 +609,6 @@ module hdmi_mixer #(
                 S_dyn_y = S_y_2d - DYN_OSD_Y;
 
                 if((S_dyn_y >= 12'd24) && (S_dyn_y < 12'd72)) begin
-                    // Second and third lines compare the minimum gate with largest CCL area.
                     if((S_dyn_x < 12'd48) &&
                        (((S_dyn_y >= 12'd28) && (S_dyn_y < 12'd44)) ||
                         ((S_dyn_y >= 12'd52) && (S_dyn_y < 12'd68)))) begin
@@ -878,7 +714,6 @@ module hdmi_mixer #(
                     if(S_pf_on)
                         S_dyn_on = 1'b1;
                 end else begin
-                // Unified prefix render using one character library.
                 // an:[0..23], lu:[24..47], C:[52..67], N:[68..83], T:[84..99], :[100..107]
                 if((S_dyn_x < 12'd108) && (S_dyn_y < 12'd24)) begin
                     if((S_dyn_x < 12'd24) || ((S_dyn_x >= 12'd24) && (S_dyn_x < 12'd48))) begin
@@ -990,7 +825,6 @@ module hdmi_mixer #(
                         S_dyn_on = 1'b1;
                 end
 
-                // Decimal 6 digits starts at x=110. Each digit is 15x24.
                 if((S_dyn_x >= 12'd110) && (S_dyn_x < 12'd200)) begin
                     if(S_dyn_x < 12'd125) begin
                         S_dyn_digit_idx = 4'd0;
@@ -1023,8 +857,6 @@ module hdmi_mixer #(
                         S_dyn_dec_digit = S_cnt_d0;
                     end
 
-                    // Render decimal digits through unified 16x16 character library.
-                    // Keep enlarged 15x24 box for readability.
                     if((S_dyn_digit_x < 12'd15) && (S_dyn_y < 12'd24)) begin
                         S_pf_char = CHAR_0 + {4'd0, S_dyn_dec_digit};
                         S_pf_local_x = S_dyn_digit_x[4:0];
@@ -1058,9 +890,7 @@ module hdmi_mixer #(
                 end
                 end // first OSD line (frame count)
 
-                // MIN AREA / MAX AREA use the pane-title glyph size, with yellow text only.
                 if((S_dyn_y >= 12'd24) && (S_dyn_y < 12'd72) && (S_dyn_x < 12'd64)) begin
-                    // Suppress the legacy label layer and leave all non-glyph pixels transparent.
                     S_dyn_on = 1'b0;
                     if(((S_dyn_y >= 12'd28) && (S_dyn_y < 12'd44)) ||
                        ((S_dyn_y >= 12'd52) && (S_dyn_y < 12'd68))) begin
@@ -1090,7 +920,6 @@ module hdmi_mixer #(
                     end
                 end else if(S_dyn_on) begin
                     S_osd_hit = 1'b1;
-                    // Keep MIN/MAX values yellow in both ROI and threshold modes.
                     S_osd_color = COLOR_DYN_TEXT;
                 end
             end

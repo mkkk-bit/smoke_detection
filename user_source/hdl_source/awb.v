@@ -259,8 +259,6 @@ assign  rgb888_b_d0[0] = I_tdata_d0[0+:8];
     assign  rgb888_b_d1[3] = data_d1[72+:8];
 
     // 1280x720 two-dimensional white-field correction:
-    // red/blue gain is about 1.125x at the borders and rises smoothly
-    // to about 1.37x at the center; x and y distance are both included.
     reg  [11:0] pixel_x;
     reg  [9:0]  pixel_y;
     wire [11:0] pixel_x_base;
@@ -311,8 +309,6 @@ assign  rgb888_b_d0[0] = I_tdata_d0[0+:8];
                 base_gain = 20'h12000 + gain_delta;
             end
 
-            // Mild local correction from the latest white-paper image:
-            // green is in the lower-center; red is in the upper side regions.
             center_x_weight = 8'd0;
             if ((x > 12'd256) && (x < 12'd512))
                 center_x_weight = x - 12'd256;
@@ -359,7 +355,6 @@ assign  rgb888_b_d0[0] = I_tdata_d0[0+:8];
     assign rb_gain_2 = rb_gain_at_xy(pixel_x_2, pixel_y_base);
     assign rb_gain_3 = rb_gain_at_xy(pixel_x_3, pixel_y_base);
 
-    // Advance y once per end-of-line pulse and reset at each frame.
     always @(posedge I_clk or negedge I_rst_n) begin
         if (!I_rst_n) begin
             pixel_y <= 10'd0;
@@ -372,7 +367,6 @@ assign  rgb888_b_d0[0] = I_tdata_d0[0+:8];
                 pixel_y <= pixel_y + 10'd1;
         end
     end
-    // Four RGB pixels per valid beat; wrap the x coordinate at line width.
     always @(posedge I_clk or negedge I_rst_n) begin
         if (!I_rst_n) begin
             pixel_x <= 12'd0;

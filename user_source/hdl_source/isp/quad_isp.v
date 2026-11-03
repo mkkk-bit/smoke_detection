@@ -1,8 +1,3 @@
-// Four-view mosaic stream generator.
-// Input: four RGB pixels per 96-bit beat, 320 valid beats per 1280-pixel line.
-// Output: sequential 128-bit RGB stream for quad_writer.
-// Each 2x2-downsampled view is 640x360; two 640-pixel lines are packed into
-// one 1280-pixel mosaic line. Each camera frame contributes 360 mosaic lines.
 module quad_isp (
     input              I_clk,
     input              I_rst_n,
@@ -20,8 +15,6 @@ module quad_isp (
     reg [9:0] line_cnt;
     reg       frame_par;
 
-    // AXI video markers are used as row/frame boundaries. The marker beat
-    // carries the first pixel of the frame, so select the new parity on tuser.
     always @(posedge I_clk or negedge I_rst_n) begin
         if (!I_rst_n) begin
             word_cnt <= 9'd0;
@@ -45,7 +38,6 @@ module quad_isp (
     wire frame_eff = I_tuser ? ~frame_par : frame_par;
     wire [9:0] line_eff = I_tuser ? 10'd0 : line_cnt;
 
-    // Hold one page selection across the two camera frames that form a mosaic.
     reg page_pair;
     always @(posedge I_clk or negedge I_rst_n) begin
         if(!I_rst_n)
@@ -74,9 +66,6 @@ module quad_isp (
         .I_tlast(I_tlast), .I_tuser(I_tuser), .I_word_cnt(word_cnt),
         .I_tdata(I_mask_tdata), .O_v_pair(mask_pair)
     );
-    // Page 0 reuses the existing ORIGINAL/EDGE/MASK downsample streams.
-    // Page 1 transforms the already-downsampled original pair, avoiding four
-    // additional line-buffer banks and keeping this logic off the AWB critical path.
     wire [47:0] detector_pair = !frame_eff ?
                                 (line_eff[0] ? edge_pair : orig_pair) :
                                 (line_eff[0] ? orig_pair : mask_pair);
@@ -165,9 +154,6 @@ module quad_isp (
     wire [47:0] process_pair = process_transform(orig_pair, process_sel);
     wire [47:0] pair_data = page_eff ? process_pair : detector_pair;
 
-    // Eight 48-bit beats form exactly 384 bits, or three 128-bit words.
-    // Packing advances only on valid beats. Unlike the old gap-flush logic,
-    // blanking or an isolated valid bubble cannot emit stale/partial words.
     reg [383:0] sh;
     reg [2:0]   pack_count;
     wire [383:0] sh_next = {sh[335:0], pair_data};
@@ -183,9 +169,6 @@ module quad_isp (
         end
     end
 
-    // Emit word A at group completion, then B and C on the next two clocks.
-    // This small drain state runs even when input tvalid is low, so every
-    // complete group is delivered while the next group is being collected.
     reg [127:0] word_b;
     reg [127:0] word_c;
     reg [1:0]   drain_state;

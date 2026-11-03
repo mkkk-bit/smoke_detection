@@ -741,8 +741,6 @@ threshold_calib u_threshold_calib(
     .O_lum_th (S_lum_th_cam)
 );
 
-// The adjustable threshold is changed in the HDMI/control clock domain and
-// transferred as a stable bus with a toggle handshake into the camera domain.
 always @(posedge S_csi_rx_clk or negedge S_rst_n) begin
     if(!S_rst_n) begin
         S_min_area_sync1_cam <= 20'd64;
@@ -790,8 +788,6 @@ always @(posedge S_csi_rx_clk or negedge S_rst_n) begin
 end
 
 
-	// Frame-rate toggle provides a coherent transfer of the stable 20-bit count
-	// and bounding box (数据在帧内稳定, toggle边沿锁存无亚稳态问题).
 reg          S_fire_valid_sync;  // 同步到 hdmi 域
 reg  [7:0]   S_confidence_sync;  // 置信度同步到 hdmi 域
 wire         S_sec_write;        // snap_store <-> sd_card_top 扇区写握手
@@ -820,7 +816,6 @@ reg [19:0] S_area_th_sync;
 reg [21:0] S_bbox_xmin_sync, S_bbox_xmax_sync;
 reg [19:0] S_bbox_ymin_sync, S_bbox_ymax_sync;
 reg [1:0]  S_bbox_valid_sync;
-// Pause freezes only display OSD metadata; detection and alarm hardware remain live.
 reg [21:0] S_bbox_xmin_pause, S_bbox_xmax_pause;
 reg [19:0] S_bbox_ymin_pause, S_bbox_ymax_pause;
 reg [1:0] S_bbox_valid_pause;
@@ -1137,8 +1132,6 @@ end
     localparam [25:0] AREA_KEY_REPEAT_DELAY_CYCLES = 26'd33412500; // 450ms
     localparam [23:0] AREA_KEY_REPEAT_INTERVAL_CYCLES = 24'd11137500; // 150ms
 
-    // K3/K4: one step as soon as a debounced press is accepted, then repeat
-    // after 450ms and every 150ms while held. Inputs are active-low.
     always @(posedge S_hdmi_pixel_clk or negedge S_hdmi_rst_n) begin
         if(!S_hdmi_rst_n) begin
             S_area_key_dn_sync1 <= 1'b0;
@@ -1163,7 +1156,6 @@ end
             S_area_down_trig <= 1'b0;
             S_area_up_trig <= 1'b0;
 
-            // K3: lower the area threshold.
             if(S_area_key_dn_sync2 == S_area_key_dn_pressed) begin
                 S_area_key_dn_db_cnt <= 21'd0;
                 if(S_area_key_dn_pressed) begin
@@ -1200,7 +1192,6 @@ end
                 S_area_key_dn_db_cnt <= S_area_key_dn_db_cnt + 1'b1;
             end
 
-            // K4: raise the area threshold.
             if(S_area_key_up_sync2 == S_area_key_up_pressed) begin
                 S_area_key_up_db_cnt <= 21'd0;
                 if(S_area_key_up_pressed) begin
@@ -1239,57 +1230,47 @@ end
         end
     end
 
-    // HX1P35A schematic names the four GPIO nets SW0..SW3:
-    //   SW0/A4=physical SW1, SW1/B4=physical SW2,
-    //   SW2/E11=physical SW3, SW3/D11=physical SW4.
-    // Keep the board silk-screen numbering explicit here; the extra SW5/SW6
-    // on the board are peripheral switches and are not part of I_sw[3:0].
-    // Board test showed the physical SW3/SW4 ROI enables are opposite to the
-    // earlier assumed bit assignment: SW3 drives I_sw[3], SW4 drives I_sw[2].
-    // Board observation: SW1-UP is active-low at I_sw[0]; invert only this mode input.
 
     wire S_sw1_threshold = I_sw[0];
     wire S_sw2_capture   = I_sw[1];
     wire S_sw3_right_roi = I_sw[3];
     wire S_sw4_left_roi  = I_sw[2];
     wire S_threshold_mode = ~S_sw1_threshold; // SW1拨上: 手动阈值模式
-    // Keep the guides one displayed pixel clear of the central split line.
     localparam [10:0] ROI_X_MAX = 11'd1277;
     localparam [10:0] ROI_STEP = 11'd8;
+    wire S_roi_left_select  = S_sw4_left_roi && !S_sw3_right_roi;
+    wire S_roi_right_select = S_sw3_right_roi && !S_sw4_left_roi;
+    wire S_roi_select_valid = S_roi_left_select || S_roi_right_select;
     always @(posedge S_hdmi_pixel_clk or negedge S_hdmi_rst_n) begin
         if(!S_hdmi_rst_n) begin
             S_roi_left_config_hdmi <= 11'd320;
             S_roi_right_config_hdmi <= 11'd960;
             S_roi_toggle_hdmi <= 1'b0;
-        end else if(!S_threshold_mode && (S_area_down_trig || S_area_up_trig)) begin
-            if(S_area_down_trig) begin // K3: enabled boundary moves right
-                if(S_sw4_left_roi) begin // physical SW4 enables left boundary
+        end else if(!S_threshold_mode && S_roi_select_valid && (S_area_down_trig || S_area_up_trig)) begin
+            if(S_area_down_trig) begin // K3: selected boundary moves right
+                if(S_roi_left_select) begin
                     if(S_roi_left_config_hdmi > ROI_X_MAX - ROI_STEP)
                         S_roi_left_config_hdmi <= ROI_X_MAX;
                     else
                         S_roi_left_config_hdmi <= S_roi_left_config_hdmi + ROI_STEP;
-                end
-                if(S_sw3_right_roi) begin // physical SW3 enables right boundary
+                end else if(S_roi_right_select) begin
                     if(S_roi_right_config_hdmi > ROI_X_MAX - ROI_STEP)
                         S_roi_right_config_hdmi <= ROI_X_MAX;
                     else
                         S_roi_right_config_hdmi <= S_roi_right_config_hdmi + ROI_STEP;
                 end
-                if(S_sw4_left_roi || S_sw3_right_roi)
-                    S_roi_toggle_hdmi <= ~S_roi_toggle_hdmi;
-            end else begin // K4: enabled boundary moves left
-                if(S_sw4_left_roi)
+                S_roi_toggle_hdmi <= ~S_roi_toggle_hdmi;
+            end else begin // K4: selected boundary moves left
+                if(S_roi_left_select)
                     S_roi_left_config_hdmi <= (S_roi_left_config_hdmi < ROI_STEP) ?
                                               11'd0 : S_roi_left_config_hdmi - ROI_STEP;
-                if(S_sw3_right_roi)
+                else if(S_roi_right_select)
                     S_roi_right_config_hdmi <= (S_roi_right_config_hdmi < ROI_STEP) ?
                                                11'd0 : S_roi_right_config_hdmi - ROI_STEP;
-                if(S_sw4_left_roi || S_sw3_right_roi)
-                    S_roi_toggle_hdmi <= ~S_roi_toggle_hdmi;
+                S_roi_toggle_hdmi <= ~S_roi_toggle_hdmi;
             end
         end
     end
-
     always @(posedge S_hdmi_pixel_clk or negedge S_hdmi_rst_n) begin
         if(!S_hdmi_rst_n) begin
             S_min_area_config_hdmi <= 20'd64;
@@ -1337,7 +1318,6 @@ end
             S_display_pause <= ~S_display_pause;
     end
 
-    // Freeze box coordinates and alarm text state while the displayed frame is paused.
     always @(posedge S_hdmi_pixel_clk or negedge S_hdmi_rst_n) begin
         if(!S_hdmi_rst_n) begin
             S_bbox_xmin_pause <= 22'd0;
@@ -1356,7 +1336,6 @@ end
         end
     end
 
-    // Freeze every visible OSD value with the paused DDR frame.
     reg [3:0]  S_debug_status_pause;
     reg [19:0] S_candidate_count_osd_pause, S_min_area_osd_pause, S_max_area_osd_pause;
     reg        S_threshold_mode_osd_pause;
@@ -1737,8 +1716,6 @@ end
         .I_rst_n      (S_hdmi_rst_n    ),
         .I_hsync      (S_box_hsync     ),
         .I_vsync      (S_box_vsync     ),
-        // Show ALARM only while the debounced/held fire alarm is active,
-        // matching the fire LED instead of the raw per-frame detector.
         .I_alarm      (S_process_quad_hdmi ? 1'b0 : (S_display_pause ? S_fire_alarm_pause : O_led_fire)),
         .I_quad_mode  (S_quad_mode_hdmi),   // QUAD模式: ALARM文字1x缩至右下象限
         .O_osd_pixel  (S_alarm_rgb     ),

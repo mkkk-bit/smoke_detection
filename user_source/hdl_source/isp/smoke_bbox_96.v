@@ -163,9 +163,6 @@ module smoke_bbox_96 #(
     wire [11:0] bbox_h = {2'b0, y_max_r - y_min_r} + 12'd1;   // 包围盒高
     wire aspect_ok = (bbox_w <= (bbox_h << 2)) && (bbox_h <= (bbox_w << 2));
 
-    // roi_mask is formed before counting, so smoke confidence uses only the active ROI.
-    // Area/shape score: no pixels=0, too sparse=40, oversized=20,
-    // elongated=55, compact in-range target=88..99.
     wire [7:0] conf_size_step = (cnt_accum[19:7] > 8'd11) ? 8'd11 : cnt_accum[19:7];
     wire [7:0] conf_calc = !any_hit              ? 8'd0  :
                            (cnt_accum < CNT_MIN) ? 8'd40 :

@@ -1,5 +1,3 @@
-// 2x2 box downsample stage for the four-view mosaic.
-// Input pixels are ordered left-to-right from [95:72] to [23:0].
 module quad_hv_avg (
     input            I_clk,
     input            I_rst_n,
@@ -15,8 +13,6 @@ module quad_hv_avg (
     wire [23:0] px2 = I_tdata[47:24];
     wire [23:0] px3 = I_tdata[23:0];
 
-    // Average each RGB channel independently. Averaging a packed 24-bit
-    // RGB word as one integer lets blue/green carries leak into other channels.
     function [23:0] avg_rgb;
         input [23:0] a;
         input [23:0] b;
@@ -34,7 +30,6 @@ module quad_hv_avg (
     wire [23:0] h0 = avg_rgb(px0, px1);
     wire [23:0] h1 = avg_rgb(px2, px3);
 
-    // One previous horizontal-average line per output pixel lane.
     reg [23:0] line0 [0:319];
     reg [23:0] line1 [0:319];
     always @(posedge I_clk) begin
@@ -47,8 +42,6 @@ module quad_hv_avg (
     wire [23:0] prev0 = line0[I_word_cnt];
     wire [23:0] prev1 = line1[I_word_cnt];
 
-    // Do not blend the first row of a camera frame with the last row of the
-    // preceding frame. tuser is expected with the first valid beat.
     reg have_previous_line;
     always @(posedge I_clk or negedge I_rst_n) begin
         if (!I_rst_n)
@@ -63,6 +56,5 @@ module quad_hv_avg (
     wire [23:0] v0 = use_previous ? avg_rgb(prev0, h0) : h0;
     wire [23:0] v1 = use_previous ? avg_rgb(prev1, h1) : h1;
 
-    // Preserve pixel order: first (left) output pixel occupies the high lane.
     assign O_v_pair = {v0, v1};
 endmodule

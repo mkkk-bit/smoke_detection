@@ -8,7 +8,7 @@ module quad_top (
     input      [3:0]   I_sw_raw,       // 原始物理拨片电平: SW1..SW4 -> I_sw[0]..I_sw[3]
     input      [10:0]  I_roi_left,
     input      [10:0]  I_roi_right,
-    // 原图流 (hdmi_mixer 输出, 含 LOGO+候选计数OSD, 相对判定流早 5 拍)
+    // 原图流 (hdmi_mixer 输出, 含候选计数OSD, 相对判定流早 5 拍)
     input              I_vid_de,
     input              I_vid_hsync,
     input              I_vid_vsync,
@@ -30,7 +30,7 @@ module quad_top (
 // ============================================================
 // 四分屏/全屏视图切换 + KEY1 六态循环 + 视图OSD (时钟 S_hdmi_pixel_clk)
 // 输入两路同源显示流 (同一 VTC 时序, 判定流=原图流+5拍):
-//   I_vid_* = 原图流 (hdmi_mixer 输出, 含 LOGO+候选计数OSD)
+//   I_vid_* = 原图流 (hdmi_mixer 输出, 含候选计数OSD)
 //   I_det_* = 判定流 (框选/ALARM/状态/可信度 OSD 合成后的画面)
 // 内部重建: 边缘流 (+2拍->补3拍), 掩码流 (+1拍->补4拍)
 // 四路对齐到 判定流相位(+5拍) 后 4:1 mux 寄存 1 拍, 再 1 拍输出寄存器 (总 +7 拍)
@@ -266,8 +266,8 @@ module quad_top (
             end else begin
                 case({s,i})
                     5'd0:lbl_char=0; 5'd1:lbl_char=1; 5'd2:lbl_char=2; 5'd3:lbl_char=3; 5'd4:lbl_char=2; 5'd5:lbl_char=4; 5'd6:lbl_char=5; 5'd7:lbl_char=6;
-                    5'd8:lbl_char=7; 5'd9:lbl_char=8; 5'd10:lbl_char=3; 5'd11:lbl_char=7; 5'd12:lbl_char=31; 5'd13:lbl_char=8; 5'd14:lbl_char=5; 5'd15:lbl_char=14;
-                    5'd16:lbl_char=1; 5'd17:lbl_char=7; 5'd18:lbl_char=8; 5'd19:lbl_char=31; 5'd20:lbl_char=1; 5'd21:lbl_char=5; 5'd22:lbl_char=10; 5'd23:lbl_char=11;
+                    5'd8:lbl_char=7; 5'd9:lbl_char=8; 5'd10:lbl_char=3; 5'd11:lbl_char=7; 5'd12:lbl_char=31; 5'd13:lbl_char=9; 5'd14:lbl_char=5; 5'd15:lbl_char=14;
+                    5'd16:lbl_char=1; 5'd17:lbl_char=7; 5'd18:lbl_char=8; 5'd19:lbl_char=31; 5'd20:lbl_char=9; 5'd21:lbl_char=5; 5'd22:lbl_char=10; 5'd23:lbl_char=11;
                     5'd24:lbl_char=13; 5'd25:lbl_char=5; 5'd26:lbl_char=1; 5'd27:lbl_char=3; 5'd28:lbl_char=5; 5'd29:lbl_char=13;
                     default:lbl_char=31;
                 endcase
@@ -423,8 +423,6 @@ module quad_top (
     wire sep_hit = (x_cnt == 11'd639) || (x_cnt == 11'd640) ||
                    (y_cnt == 10'd359) || (y_cnt == 10'd360);
 
-    // ROI guides appear in the RED MASK and TARGET panes in both QUAD and
-    // full-screen views. The camera image is downscaled 2:1 in QUAD view.
     wire [9:0] roi_left_disp  = I_roi_left[10:1];
     wire [9:0] roi_right_disp = I_roi_right[10:1];
     wire roi_quad_mask = (view_mode == 3'd0) && (y_cnt >= 10'd361) &&
@@ -438,9 +436,6 @@ module quad_top (
                           (roi_quad_target && (x_cnt == (11'd641 + {1'b0, roi_right_disp}))) ||
                           (((view_mode == 3'd4) || (view_mode == 3'd5)) && (x_cnt == {1'b0, I_roi_right}));
 
-    // Debug the actual switch levels on RED MASK and TARGET views. Four small
-    // indicators match the board left-to-right physical order: SW4, SW3, SW2, SW1.
-    // High is yellow and low is dark gray, so polarity can be checked on the board.
     wire roi_status_quad_mask = (view_mode == 3'd0) &&
         (y_cnt >= 10'd366) && (y_cnt < 10'd374) &&
         (x_cnt >= 11'd92) && (x_cnt < 11'd132);
@@ -518,7 +513,6 @@ module quad_top (
     wire [63:0] icon_bits = icon_row(icon_y);       // 函数结果先落 wire 再位选 (V2001)
     wire [1:0]  icon_px   = icon_bits[{icon_x, 1'b0} +: 2];
 
-    // Turn the camera icon green for about one second after a saved snapshot.
     reg [7:0] snap_count_d;
     reg [26:0] snap_success_timer;
     always @(posedge I_clk or negedge I_rst_n) begin
@@ -535,6 +529,59 @@ module quad_top (
     end
     wire snap_success = (snap_success_timer != 27'd0);
 
+    // ---- 安路 logo 水印 (最底层, 65% 不透明度) ----
+    // addr = y*160 + x
+    wire [14:0] S_logo_addr = {y_cnt[7:0], 7'd0} + {y_cnt[7:0], 5'd0} + {7'd0, x_cnt[7:0]};
+    reg  [14:0] S_logo_addr_d1;
+    wire [24:0] S_logo_pixel_rom;
+    anlogic_logo_rom u_anlogic_logo_rom(
+        .I_addr  ( S_logo_addr_d1 ),
+        .O_pixel ( S_logo_pixel_rom )
+    );
+    reg  [24:0] S_logo_pixel;
+    reg         S_logo_xy_guard_d1;
+    reg         S_logo_xy_guard_d2;
+    reg  [23:0] S_mux_data_d1;
+    reg  [23:0] S_mux_data_d2;
+    always @(posedge I_clk or negedge I_rst_n) begin
+        if(!I_rst_n) begin
+            S_logo_addr_d1     <= 15'd0;
+            S_logo_pixel       <= 25'd0;
+            S_logo_xy_guard_d1 <= 1'b0;
+            S_logo_xy_guard_d2 <= 1'b0;
+            S_mux_data_d1      <= 24'd0;
+            S_mux_data_d2      <= 24'd0;
+        end else begin
+            S_logo_addr_d1     <= S_logo_addr;
+            S_logo_pixel       <= S_logo_pixel_rom;
+            S_logo_xy_guard_d1 <= (x_cnt < 12'd160) && (y_cnt < 12'd160);
+            S_logo_xy_guard_d2 <= S_logo_xy_guard_d1;
+            S_mux_data_d1      <= S_mux_data;
+            S_mux_data_d2      <= S_mux_data_d1;
+        end
+    end
+    // 混合: (视频*11 + logo*21 + 16) >> 5
+    wire [16:0] S_logo_blend_r = ({S_mux_data_d2[23:16], 3'd0}) +        // v*8
+                                 ({S_mux_data_d2[23:16], 1'd0}) +        // v*2
+                                 S_mux_data_d2[23:16] +                  // v*1
+                                 ({S_logo_pixel[23:16], 4'd0}) +        // l*16
+                                 ({S_logo_pixel[23:16], 2'd0}) +        // l*4
+                                 S_logo_pixel[23:16] + 13'd16;          // l*1 + 16
+    wire [16:0] S_logo_blend_g = ({S_mux_data_d2[15:8], 3'd0}) +
+                                 ({S_mux_data_d2[15:8], 1'd0}) +
+                                 S_mux_data_d2[15:8] +
+                                 ({S_logo_pixel[15:8], 4'd0}) +
+                                 ({S_logo_pixel[15:8], 2'd0}) +
+                                 S_logo_pixel[15:8] + 13'd16;
+    wire [16:0] S_logo_blend_b = ({S_mux_data_d2[7:0], 3'd0}) +
+                                 ({S_mux_data_d2[7:0], 1'd0}) +
+                                 S_mux_data_d2[7:0] +
+                                 ({S_logo_pixel[7:0], 4'd0}) +
+                                 ({S_logo_pixel[7:0], 2'd0}) +
+                                 S_logo_pixel[7:0] + 13'd16;
+    wire [23:0] S_logo_blend_rgb = {S_logo_blend_r[12:5], S_logo_blend_g[12:5], S_logo_blend_b[12:5]};
+    wire logo_hit = S_logo_xy_guard_d2 && S_logo_pixel[24];
+
     // ---- 输出寄存器 (mux 结果 + 覆盖层; 与同步信号同拍) ----
     always @(posedge I_clk or negedge I_rst_n) begin
         if(!I_rst_n) begin
@@ -548,7 +595,7 @@ module quad_top (
             else if(de_i && roi_right_line)
                 O_data <= 24'h00FFFF;             // 右边界: 青色
             else if(de_i && roi_status_hit)
-                O_data <= roi_status_color;        // raw SW1..SW4 status, high=yellow
+                O_data <= roi_status_color;        // SW1..SW4 状态, 高电平=黄
             else if(de_i && w_glyph)
                 O_data <= 24'hFFFFFF;             // 白字
             else if(de_i && (quad_label_bg || fullscreen_label_bg))
@@ -556,11 +603,13 @@ module quad_top (
             else if(de_i && ((view_mode == 3'd0) || (view_mode == 3'd1)) && sep_hit)
                 O_data <= 24'hFFFFFF;             // 分隔线
             else if(de_i && (view_mode != 3'd1) && (I_sw2 || snap_success) && in_icon_x && in_icon_y && (icon_px == 2'd2))
-                O_data <= snap_success ? 24'h00E040 : 24'hEB3C3C; // successful save: green silhouette
+                O_data <= snap_success ? 24'h00E040 : 24'hEB3C3C; // 保存成功: 绿色
             else if(de_i && (view_mode != 3'd1) && (I_sw2 || snap_success) && in_icon_x && in_icon_y && (icon_px == 2'd3))
-                O_data <= snap_success ? 24'hD8FFE4 : 24'hF5F5F5; // green success highlight
+                O_data <= snap_success ? 24'hD8FFE4 : 24'hF5F5F5; // 保存成功高亮
             else if(de_i && (view_mode != 3'd1) && (I_sw2 || snap_success) && in_icon_x && in_icon_y && (icon_px == 2'd1))
                 O_data <= 24'h1C222C;             // SW2相机图标: 镜头深色内芯
+            else if(de_i && logo_hit)
+                O_data <= S_logo_blend_rgb;       // 安路 logo 65% 真色水印 (最底层)
             else
                 O_data <= S_mux_data;
         end

@@ -24,8 +24,6 @@ wire [23:0] pix1 = I_tdata[71:48];
 wire [23:0] pix2 = I_tdata[47:24];
 wire [23:0] pix3 = I_tdata[23:0];
 
-// Low-cost luminance approximation: R/4 + G/2 + B/4.  Its maximum is
-// 253, so it cannot overflow an 8-bit result and requires no divider.
 wire [7:0] gray0 = {2'b0,pix0[23:18]} + {1'b0,pix0[15:9]} + {2'b0,pix0[7:2]};
 wire [7:0] gray1 = {2'b0,pix1[23:18]} + {1'b0,pix1[15:9]} + {2'b0,pix1[7:2]};
 wire [7:0] gray2 = {2'b0,pix2[23:18]} + {1'b0,pix2[15:9]} + {2'b0,pix2[7:2]};
@@ -33,9 +31,6 @@ wire [7:0] gray3 = {2'b0,pix3[23:18]} + {1'b0,pix3[15:9]} + {2'b0,pix3[7:2]};
 
 localparam IMG_WIDTH_GRP = (IMG_WIDTH >> 2);
 
-// Use two grayscale samples per 4-pixel input beat.  Each sample represents
-// a neighbouring pair of pixels, providing 640 horizontal edge samples while
-// keeping the two line buffers small enough for this device.
 wire [8:0] pair_sum0 = {1'b0,gray0} + {1'b0,gray1};
 wire [8:0] pair_sum1 = {1'b0,gray2} + {1'b0,gray3};
 wire [7:0] pair0 = pair_sum0[8:1];
@@ -80,8 +75,6 @@ function [13:0] sobel_mag;
     end
 endfunction
 
-// Two Sobel windows are evaluated per input beat. Each result is duplicated
-// to its corresponding pair of output pixels.
 wire [13:0] mag0 = sobel_mag(top_prev2,top_prev1,top0,
                              mid_prev2,mid_prev1,mid0,
                              bot_prev2,bot_prev1,pair0);
@@ -107,9 +100,6 @@ always @(posedge I_clk or negedge I_rst_n) begin
         top_prev2 <= 8'd0; top_prev1 <= 8'd0;
         mid_prev2 <= 8'd0; mid_prev1 <= 8'd0;
         bot_prev2 <= 8'd0; bot_prev1 <= 8'd0;
-        // Do not clear line memories here.  A reset loop turns the 10-Kbit
-        // buffers into slice registers on this device.  The first two rows
-        // are masked by window_valid and naturally initialize both buffers.
     end else begin
         O_tlast  <= I_tlast;
         O_tuser  <= I_tuser;

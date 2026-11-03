@@ -1,34 +1,3 @@
-/******************************************************************************
- * feature_fuse.v — 四维特征帧级融合 + 硬件IIR + 自适应面积阈值 + 火情判定
- *
- * 位置: user_source/hdl_source/isp/feature_fuse.v
- * 时钟: 与 isp_top 同源 (axi4s_video_aclk = S_csi_rx_clk)
- *
- * 输入均帧内稳定 (帧头锁存上一帧结果):
- *   I_candidate_count : 颜色候选像素数 (color_mask_96.O_frame_count)
- *   I_cand_edge_sum   : 候选区水平梯度能量 (color_mask_96.O_cand_edge_sum)
- *   I_luma_sum        : 全帧亮度 r+g+b (color_mask_96.O_luma_sum)
- *   I_bbox_valid      : detect_ccl_96 多目标 valid (面积 >= I_min_area)
- *
- * 输出:
- *   O_min_area  : 自适应面积阈值, 回喂 detect_ccl_96.I_min_area
- *   O_fire_valid: 融合火情判定 = bbox_valid[0] AND 边缘门 AND 颜色门
- *
- * 设计 (四维: 色彩/饱和度/亮度/边缘纹理):
- *   - 色彩/饱和度: 由 color_mask_96 完成, 此处体现为候选像素数
- *   - 边缘纹理: 候选区水平梯度能量 (火焰内部/边界高频, 实心红物体内部低频)
- *   - 亮度: 场景均值亮度 -> 自适应面积阈值 (暗光降阈防漏检, 强光升阈防误检)
- *   - IIR: 对候选数/边缘能量/亮度做 1 极点 EMA (移位系数 1/2^IIR_SHIFT, 直流增益1)
- *
- * 已知取舍:
- *   - 边缘能量是候选区"水平"梯度均值, 含物体左右边界贡献; 对大面积均匀红色
- *     假目标(内部梯度≈0)均值趋小、对火焰(内部闪烁高频)均值偏大, 可区分;
- *     小目标边界占比高, 判别力下降 — EDGE_NUM 需上板标定。
- *   - IIR 为帧级 EMA (非逐像素; 逐像素需 ~900Kbit 帧缓冲, 本器件不划算)。
- *   - 融合只做"收紧"门控 (fire_valid ⊆ bbox_valid[0]), 暗光漏检由自适应
- *     MIN_AREA 解决, 保证框/警一致。
- * 全整数运算, 无除法器, 无浮点。所有阈值/权重为 parameter, 供上板标定。
- *****************************************************************************/
 module feature_fuse #(
     parameter [2:0]  IIR_SHIFT  = 3'd3,       // IIR 极点: 1/2^K (时间常数 ~2^K 帧)
     parameter [19:0] AREA_MIN   = 20'd16,     // 自适应下限 (暗光)
@@ -118,9 +87,6 @@ module feature_fuse #(
     // ---- 火情判定条件 (4门全过) ----
     wire fire_cond = I_bbox_valid[0] && edge_gate && color_gate && flicker_gate && sat_gate;
 
-    // Inputs are ROI-filtered in color_mask_96/detect_ccl_96, so this confidence
-    // describes only the active between-lines (or outside-lines) detection region.
-    // Explainable fire confidence: bbox 30, color 20, edge 20, flicker 15, saturation 15.
     wire [7:0] conf_gate_sum = (I_bbox_valid[0] ? 8'd30 : 8'd0) +
                                (color_gate     ? 8'd20 : 8'd0) +
                                (edge_gate      ? 8'd20 : 8'd0) +

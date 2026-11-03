@@ -79,8 +79,6 @@ wire         m_aixs_tvalid;  //synthesis keep
   wire          fuse_fire_valid;     // 融合判定 (feature_fuse -> 顶层)
   wire [7:0]    fuse_confidence;     // 检测置信度 (feature_fuse -> 顶层)
 
-// Hold ROI coordinates constant for a whole frame. A control update arriving
-// mid-frame is applied atomically on the next AWB frame-start beat.
 reg [10:0] S_roi_left_frame, S_roi_right_frame;
 always @(posedge axi4s_video_aclk or negedge I_rst_n) begin
     if(!I_rst_n) begin
@@ -103,7 +101,6 @@ wire [10:0] S_roi_right_effective = awb_O_tuser ? I_roi_right : S_roi_right_fram
   wire         awb_O_tvalid_128;  //synthesis keep
   wire [127:0] awb_O_tdata_128;  //synthesis keep
 
-  // KEY1 cycles continuously running views: raw -> edge -> color mask -> raw.
   wire S_edge_key_trig;
   reg [1:0] view_mode;  // 0 raw, 1 edge, 2 color mask
   key_remove_shakes u_edge_key_shakes(
@@ -248,8 +245,6 @@ color_mask_96 #(
 // 4邻域 union-find 合并, 按面积降序输出全部达标连通域 (MAX_OBJ=2);
 // O_bbox_valid[i]=第i大连通域面积>=帧锁存的 I_min_area (复位初值64)
 // (绿色像素/掩码显示色不产生候选, 不触发)
-// Latch the selected threshold at frame start so it stays constant throughout
-// each frame and cannot change component decisions mid-frame.
 reg [19:0] S_min_area_frame;
 always @(posedge axi4s_video_aclk or negedge I_rst_n) begin
     if(!I_rst_n)
@@ -371,7 +366,6 @@ edge_detect_96 #(
         .O_128b_data        ( awb_O_tdata_128  	)
     );
 
-    // Synchronize the slow display-page selection into the camera pixel clock.
     reg quad_page_sync1, quad_page_sync2;
     always @(posedge axi4s_video_aclk or negedge I_rst_n) begin
         if(!I_rst_n) begin quad_page_sync1 <= 1'b0; quad_page_sync2 <= 1'b0; end

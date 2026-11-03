@@ -1,30 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""
-TF 卡告警快照解码器 (RGB565 彩色版)
-====================================
-读取 SD 卡(或 dd/Win32DiskImager 导出的 .img 镜像)的裸扇区, 解析 snap_store.v
-写入的告警快照:
-
-  每次告警占 121 个扇区(从扇区 8 开始, 环形 1936 扇区 = 最多 16 次告警):
-    扇区 N        : 512B 二进制日志(魔数/帧号/明火面积/烟头计数/包围盒/类型标志)
-    扇区 N+1..N+120: 缩略图 (256x120 RGB565 = 61440 字节, 无填充)
-
-  缩略图每个像素是 RGB565 (5bit红/6bit绿/5bit蓝, 65536 色), 本脚本解包成 RGB888。
-
-输出:
-  1. 每张缩略图放大为彩色 PNG (默认 5 倍 -> 1280x720, 保持 16:9)
-  2. 控制台打印日志表 (帧号/面积/包围盒/类型)
-
-用法:
-  python tf_card_decode.py --image dump.img            # 读镜像文件(推荐, 安全)
-  python tf_card_decode.py --drive 3                   # 直接读 \\.\PhysicalDrive3 (需管理员)
-  python tf_card_decode.py --image dump.img --scale 5  # 宽放大倍数(默认5 -> 1280宽)
-  python tf_card_decode.py --image dump.img --outdir out
-
-说明: 缩略图 256x120 是按 每5列x每6行 采样得到的, 放大到 16:9 即还原场景比例;
-      RGB565 接近自然色, 无色阶发怪问题(相对 RGB332)。
-"""
 import struct, sys, os, argparse
 
 LOG_BASE          = 8      # 日志起始扇区

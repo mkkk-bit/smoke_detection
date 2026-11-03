@@ -1,5 +1,3 @@
-// Four-pixel RGB888 color candidate mask and per-frame candidate counter.
-// The input word follows isp_top's 4-pixel/96-bit convention: pixel 0 is [95:72].
 module color_mask_96 #(
     parameter [7:0] RED_MIN       = 8'd160,
     parameter [7:0] GREEN_MIN     = 8'd0,
@@ -44,17 +42,12 @@ module color_mask_96 #(
             g_gap = {1'b0,g} + {1'b0,RED_GREEN_GAP};
             b_gap = {1'b0,b} + {1'b0,RED_BLUE_GAP};
             luma_sum = {2'b0,r} + {2'b0,g} + {2'b0,b};
-            // Strict bright-red candidate filter: reject weak red casts and
-            // most skin tones by requiring both high R and strong R dominance.
             is_candidate = (r >= RED_MIN) && (g >= GREEN_MIN) &&
                            ({1'b0,r} > g_gap) && ({1'b0,r} > b_gap) &&
                            (luma_sum >= LUMA_SUM_MIN);
         end
     endfunction
 
-    // Horizontal ROI selection follows the same four-pixel beat as the video.
-    // left < right: keep the middle; left > right: keep both outside regions;
-    // equal boundaries intentionally produce an empty ROI.
     reg [8:0] roi_x_beat;
     always @(posedge I_clk or negedge I_rst_n) begin
         if(!I_rst_n)
@@ -86,8 +79,6 @@ module color_mask_96 #(
                 roi_inside = 1'b0;
         end
     endfunction
-    // Keep the diagnostic RED MASK full-frame, while O_candidate remains
-    // ROI-gated for detection and all candidate statistics.
     wire [3:0] red_candidate_raw;
     assign red_candidate_raw[0] = is_candidate(pixel0);
     assign red_candidate_raw[1] = is_candidate(pixel1);
@@ -99,8 +90,6 @@ module color_mask_96 #(
     assign O_candidate[2] = red_candidate_raw[2] && roi_inside(roi_col2, I_roi_left, I_roi_right);
     assign O_candidate[3] = red_candidate_raw[3] && roi_inside(roi_col3, I_roi_left, I_roi_right);
 
-    // Green marks all color-threshold hits across the full image; detection
-    // still uses O_candidate, which is restricted to the active ROI.
     assign O_tdata[95:72] = red_candidate_raw[0] ? 24'h00ff00 : 24'h000000;
     assign O_tdata[71:48] = red_candidate_raw[1] ? 24'h00ff00 : 24'h000000;
     assign O_tdata[47:24] = red_candidate_raw[2] ? 24'h00ff00 : 24'h000000;
